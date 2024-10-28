@@ -1,128 +1,191 @@
 #lang racket
 
-(require 2htdp/image)
-(require 2htdp/universe)
+(require 2htdp/image
+         2htdp/universe)
 (provide (all-defined-out))
 
-;; Constants
+;; CONSTANTS
 (define FONT-SIZE 32)
 (define FONT-COLOR "black")
 (define CURSOR-WIDTH 2)
 (define TEXTBOX-WIDTH 512)
 (define TEXTBOX-HEIGHT 40)
 (define INITIAL-SPACE 4)
-(define CURSOR-BLINK-INTERVAL 0.5)
 
-;; Data Definitions
-(struct TextBox [pre post cursor-visible?])
+;; DATA DEFINITIONS AND PREDICATES
+;; TextBox is a (create-TextBox [pre : string] [post : string]) where
+;; - pre: represents list of strings of length-1 before the cursor
+;; - post: represents list of strings of length-1 after the cursor
+(struct TextBox (pre post)#:transparent)
+(define/contract (create-TextBox pre post)
+  (-> string? string? TextBox?)
+  (TextBox pre post))
+;; EXAMPLES:
+;; (create-TextBox "he" "llo")
+;; (create-TextBox "Wor" "ld")
+;; (create-TextBox "Testi" "ng")
 
-;; remove-char : String Natural -> String
-;; Removes character at position i from str
-(define (remove-char str i)
-  (string-append (substring str 0 i)
-                (substring str (add1 i))))
 
-;; shift-char : String Natural -> String
-;; Shifts character at position i to position i+1
-(define (shift-char str i)
-  (if (< i (sub1 (string-length str)))
-      (string-append
-       (substring str 0 i)
-       (substring str (add1 i) (add1 (add1 i)))
-       (substring str i (add1 i))
-       (substring str (add1 (add1 i))))
-      str))
+;; HELPER FUNCTIONS
+;; remove-last-char : String -> String
+;; Removes last character from string
+(define/contract (remove-last-char str)
+  (-> string? string?)
+  (substring str 0 (sub1 (string-length str))))
+;; EXAMPLES
+;; (remove-last-char "hello") ; => "hell"
+;; (remove-last-char "world") ; => "worl"
+;; (remove-last-char "Testing") ; => "Testin"
 
-;; create-TextBox : String String -> TextBox
-(define (create-TextBox pre-str post-str)
-  (TextBox pre-str post-str #true))
+;; remove-char : String -> String
+;; Removes first character from string
+(define/contract (remove-char str)
+  (-> string? string?)
+  (substring str 1 (string-length str)))
+;; EXAMPLES
+;; (remove-char "hello") ; => "ello"
+;; (remove-char "world") ; => "orld"
+;; (remove-char "Testing") ; => "esting"
 
+;; shift-char : String String Boolean -> (Values String String)
+;; Shifts one character between two strings
+;; Moves the last character from source to the start of destination if shift-left? is #true
+;; Moves the first character from source to the end of destination if shift-left? is #false
+(define/contract (shift-char source destination shift-left?)
+  (-> string? string? boolean? (values string? string?))
+  (cond
+    [shift-left?  
+     (let* ((last-char (substring source (sub1 (string-length source))))
+            (updated-source (substring source 0 (sub1 (string-length source))))
+            (updated-dest (string-append last-char destination)))
+       (values updated-source updated-dest))]
+    [else 
+     (let* ((first-char (substring source 0 1))
+            (updated-source (substring source 1 (string-length source)))
+            (updated-dest (string-append destination first-char)))
+       (values updated-source updated-dest))]))
+;; EXAMPLES:
+;; (shift-char "hello" "world" #false) 
+;; (shift-char "world" "testing" #true)
+
+
+;; FUNCTIONS
 ;; textbox-insert : TextBox String -> TextBox
-(define (textbox-insert tb char)
-  (TextBox 
-   (string-append (TextBox-pre tb) char)
-   (TextBox-post tb)
-   (TextBox-cursor-visible? tb)))
-
-;; textbox-left : TextBox -> TextBox
-(define (textbox-left tb)
-  (if (string=? (TextBox-pre tb) "")
-      tb
-      (TextBox 
-       (substring (TextBox-pre tb) 0 (sub1 (string-length (TextBox-pre tb))))
-       (string-append 
-        (substring (TextBox-pre tb) (sub1 (string-length (TextBox-pre tb))))
-        (TextBox-post tb))
-       (TextBox-cursor-visible? tb))))
-
-;; textbox-right : TextBox -> TextBox
-(define (textbox-right tb)
-  (if (string=? (TextBox-post tb) "")
-      tb
-      (TextBox 
-       (string-append (TextBox-pre tb) (substring (TextBox-post tb) 0 1))
-       (substring (TextBox-post tb) 1)
-       (TextBox-cursor-visible? tb))))
+;; Inserts a single-character string at the cursor position
+(define/contract (textbox-insert textbox char)
+  (-> TextBox? string? TextBox?)
+  (let* ((pre-text (TextBox-pre textbox))
+         (post-text (TextBox-post textbox))
+         (updated-pre (string-append pre-text char))) 
+    (create-TextBox updated-pre post-text)))
+;; EXAMPLES
+;; (textbox-insert (create-TextBox "hel" "lo") "!")
+;; (textbox-insert (create-TextBox "" "") "A")
+;; (textbox-insert (create-TextBox "test" "") "x")
 
 ;; textbox-delete : TextBox -> TextBox
-(define (textbox-delete tb)
-  (TextBox (TextBox-pre tb)
-           (if (string=? (TextBox-post tb) "") 
-               ""
-               (substring (TextBox-post tb) 1))
-           (TextBox-cursor-visible? tb)))
+;; Deletes the character immediately after the cursor
+(define/contract (textbox-delete textbox)
+  (-> TextBox? TextBox?)
+  (match-define (TextBox pre post) textbox)
+  (if (zero? (string-length post)) 
+      textbox
+      (create-TextBox pre (substring post 1))))
+;; EXAMPLES
+;; (textbox-delete (create-TextBox "hel" "lo"))
+;; (textbox-delete (create-TextBox "hello" ""))
+;; (textbox-delete (create-TextBox "text" "case"))
 
 ;; textbox-backspace : TextBox -> TextBox
-(define (textbox-backspace tb)
-  (TextBox 
-   (if (string=? (TextBox-pre tb) "")
-       ""
-       (substring (TextBox-pre tb) 0 (sub1 (string-length (TextBox-pre tb)))))
-   (TextBox-post tb)
-   (TextBox-cursor-visible? tb)))
+;; Deletes the character immediately before the cursor
+(define/contract (textbox-backspace textbox)
+  (-> TextBox? TextBox?)
+  (match-define (TextBox pre post) textbox)
+  (if (zero? (string-length pre)) 
+      textbox
+      (create-TextBox (substring pre 0 (sub1 (string-length pre))) post)))
+;; EXAMPLES
+;; (textbox-backspace (create-TextBox "hel" "lo"))
+;; (textbox-backspace (create-TextBox "" "world"))
+;; (textbox-backspace (create-TextBox "test" ""))
+
+;; textbox-left : TextBox -> TextBox
+;; Moves the cursor one character to the left
+(define/contract (textbox-left textbox)
+  (-> TextBox? TextBox?)
+  (match-define (TextBox pre post) textbox)
+  (let-values ([(updated-pre updated-post) (shift-char pre post #true)])
+    (create-TextBox updated-pre updated-post)))
+;; EXAMPLES
+;; (textbox-left (create-TextBox "hel" "lo"))
+;; (textbox-left (create-TextBox "a" "bc"))
+;; (textbox-left (create-TextBox "word" "s"))
+
+;; textbox-right : TextBox -> TextBox
+;; Moves the cursor one character to the right
+(define/contract (textbox-right textbox)
+  (-> TextBox? TextBox?)
+  (match-define (TextBox pre post) textbox)
+  (let-values ([(updated-pre updated-post) (shift-char post pre #false)])
+    (create-TextBox updated-post updated-pre)))
+;; EXAMPLES
+;; (textbox-right (create-TextBox "hel" "lo"))
+;; (textbox-right (create-TextBox "" "text"))
+;; (textbox-right (create-TextBox "ab" "cd"))
+
+;; key-handler : TextBox String -> TextBox
+;; Processes key events to update the TextBox state
+(define/contract (key-handler textbox key)
+  (-> TextBox? string? TextBox?)
+  (cond
+    [(equal? key "left") (textbox-left textbox)]
+    [(equal? key "right") (textbox-right textbox)]
+    [(equal? key "\b") (textbox-backspace textbox)]  ;; Backspace
+    [(equal? key "\u007F") (textbox-delete textbox)] ;; Delete
+    [(or (equal? key "\r") (equal? key "\t")) textbox]  ;; Ignore Enter and Tab
+    [(and (string? key) (= (string-length key) 1)) 
+     (textbox-insert textbox key)] 
+    [else textbox])) 
+;; EXAMPLES
+;; (key-handler (create-TextBox "hel" "lo") "left")
+;; (key-handler (create-TextBox "" "hello") "right")
+;; (key-handler (create-TextBox "test" "ing") "\b")
 
 ;; render : TextBox -> Image
-(define (render tb)
-  (let* ([pre-text (text (TextBox-pre tb) FONT-SIZE FONT-COLOR)]
-         [post-text (text (TextBox-post tb) FONT-SIZE FONT-COLOR)]
-         [cursor (if (TextBox-cursor-visible? tb)
-                    (rectangle CURSOR-WIDTH FONT-SIZE "solid" "black")
-                    (rectangle CURSOR-WIDTH FONT-SIZE "solid" "white"))]
-         [background (rectangle TEXTBOX-WIDTH TEXTBOX-HEIGHT "outline" "black")]
-         [content (beside/align "baseline" pre-text cursor post-text)])
-    (overlay/align "left" "center" 
-                  (place-image content 
-                              (+ INITIAL-SPACE (/ (image-width pre-text) 2))
-                              (/ TEXTBOX-HEIGHT 2)
-                              background)
-                  background)))
+;; Renders the TextBox state with properly positioned text and cursor
+(define/contract (render textbox)
+  (-> TextBox? image?)
+  (match-define (TextBox pre post) textbox)
 
-;; toggle-cursor : TextBox -> TextBox
-(define (toggle-cursor tb)
-  (TextBox (TextBox-pre tb)
-           (TextBox-post tb)
-           (not (TextBox-cursor-visible? tb))))
+  (define pre-text-img  (text pre FONT-SIZE FONT-COLOR))
+  (define post-text-img (text post FONT-SIZE FONT-COLOR))
+  (define cursor-img (rectangle CURSOR-WIDTH FONT-SIZE 'solid FONT-COLOR))
+  (define textbox-outline (rectangle TEXTBOX-WIDTH TEXTBOX-HEIGHT 'outline 'black))
 
-;; key-handler : TextBox KeyEvent -> TextBox
-(define (key-handler tb key)
-  (cond
-    [(string=? key "left") (textbox-left tb)]
-    [(string=? key "right") (textbox-right tb)]
-    [(or (string=? key "backspace") (string=? key "\b")) 
-     (textbox-backspace tb)]
-    [(string=? key "delete") (textbox-delete tb)]
-    [(or (string=? key "\r") (string=? key "\n") 
-         (string=? key "return") (string=? key "enter")
-         (string=? key "\t") (string=? key "tab")) 
-     tb]
-    [(= (string-length key) 1) (textbox-insert tb key)]
-    [else tb]))
+  ;; Calculate positions
+  (define pre-width (image-width pre-text-img))
+  (define cursor-x (+ INITIAL-SPACE pre-width))
+  (define text-y (/ TEXTBOX-HEIGHT 2))
+  (define center-pre (/ pre-width 2))
+  (define center-post (+ (/ (image-width post-text-img) 2) pre-width))
 
-;; main : -> TextBox
-(define (main)
+  ;; Build the scene
+  (define base-scene (place-image textbox-outline (/ TEXTBOX-WIDTH 2) (/ TEXTBOX-HEIGHT 2)
+                                  (empty-scene TEXTBOX-WIDTH TEXTBOX-HEIGHT)))
+  (define scene-with-cursor (place-image cursor-img cursor-x text-y base-scene))
+  (define scene-with-pre (place-image pre-text-img (+ INITIAL-SPACE center-pre) text-y scene-with-cursor))
+  (place-image post-text-img (+ INITIAL-SPACE center-post) text-y scene-with-pre))
+;; EXAMPLES
+;; (render (create-TextBox "hello" "world"))
+;; (render (create-TextBox "" ""))
+;; (render (create-TextBox "testing" ""))
+
+;; main : -> Void
+;; Starts the big-bang program with the initial TextBox state
+(define/contract (main)
+  (-> void?)
   (big-bang (create-TextBox "" "")
-            [to-draw render]
-            [on-key key-handler]
-            [on-tick toggle-cursor CURSOR-BLINK-INTERVAL]))
+            (on-key key-handler)
+            (to-draw render)))
 
-(main)
+;; (main)
