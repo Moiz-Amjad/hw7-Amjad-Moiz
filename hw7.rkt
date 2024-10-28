@@ -71,7 +71,7 @@
 
 ;; FUNCTIONS
 ;; textbox-insert : TextBox String -> TextBox
-;; Inserts a single-character string at the cursor position
+;; Inserts a string (single-character) at position of cursor
 (define/contract (textbox-insert textbox char)
   (-> TextBox? string? TextBox?)
   (let* ((pre-text (TextBox-pre textbox))
@@ -84,7 +84,7 @@
 ;; (textbox-insert (create-TextBox "test" "") "x")
 
 ;; textbox-delete : TextBox -> TextBox
-;; Deletes the character immediately after the cursor
+;; Removes the character immediately after cursor
 (define/contract (textbox-delete textbox)
   (-> TextBox? TextBox?)
   (match-define (TextBox pre post) textbox)
@@ -97,7 +97,7 @@
 ;; (textbox-delete (create-TextBox "text" "case"))
 
 ;; textbox-backspace : TextBox -> TextBox
-;; Deletes the character immediately before the cursor
+;; Removes character immediately before cursor
 (define/contract (textbox-backspace textbox)
   (-> TextBox? TextBox?)
   (match-define (TextBox pre post) textbox)
@@ -110,7 +110,7 @@
 ;; (textbox-backspace (create-TextBox "test" ""))
 
 ;; textbox-left : TextBox -> TextBox
-;; Moves the cursor one character to the left
+;; Moves cursor one character to the left
 (define/contract (textbox-left textbox)
   (-> TextBox? TextBox?)
   (match-define (TextBox pre post) textbox)
@@ -122,7 +122,7 @@
 ;; (textbox-left (create-TextBox "word" "s"))
 
 ;; textbox-right : TextBox -> TextBox
-;; Moves the cursor one character to the right
+;; Moves cursor one character to the right
 (define/contract (textbox-right textbox)
   (-> TextBox? TextBox?)
   (match-define (TextBox pre post) textbox)
@@ -134,7 +134,7 @@
 ;; (textbox-right (create-TextBox "ab" "cd"))
 
 ;; key-handler : TextBox String -> TextBox
-;; Processes key events to update the TextBox state
+;; Handles key events by updating TextBox state
 (define/contract (key-handler textbox key)
   (-> TextBox? string? TextBox?)
   (cond
@@ -152,7 +152,7 @@
 ;; (key-handler (create-TextBox "test" "ing") "\b")
 
 ;; render : TextBox -> Image
-;; Renders the TextBox state with properly positioned text and cursor
+;; Renders the TextBox state with text and cursor at proper positions
 (define/contract (render textbox)
   (-> TextBox? image?)
   (match-define (TextBox pre post) textbox)
@@ -169,7 +169,7 @@
   (define center-pre (/ pre-width 2))
   (define center-post (+ (/ (image-width post-text-img) 2) pre-width))
 
-  ;; Build the scene
+  ;; Build scene
   (define base-scene (place-image textbox-outline (/ TEXTBOX-WIDTH 2) (/ TEXTBOX-HEIGHT 2)
                                   (empty-scene TEXTBOX-WIDTH TEXTBOX-HEIGHT)))
   (define scene-with-cursor (place-image cursor-img cursor-x text-y base-scene))
@@ -181,7 +181,7 @@
 ;; (render (create-TextBox "testing" ""))
 
 ;; main : -> Void
-;; Starts the big-bang program with the initial TextBox state
+;; Starts big-bang program with initial TextBox state
 (define/contract (main)
   (-> void?)
   (big-bang (create-TextBox "" "")
